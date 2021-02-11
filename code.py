@@ -1,3 +1,5 @@
+import alarm
+import board
 import time
 import terminalio
 import displayio
@@ -5,6 +7,20 @@ import adafruit_imageload
 from adafruit_display_text import label
 from adafruit_magtag.magtag import MagTag
 from secrets import secrets
+
+# Must be set earlier on before something else (unknown) grabs the pin.
+# BUTTON_A/Time alarm -- no-cycle-reset. BUTTON_B -- cycle the display on reset.
+pin_alarm_first_button = alarm.pin.PinAlarm(pin=board.BUTTON_A, value=False, pull=True)
+pin_alarm_second_button = alarm.pin.PinAlarm(pin=board.BUTTON_B, value=False, pull=True)
+
+# alarm.wake_alarm holds an equivalent alarm for what waked the device.
+cycle_display = hasattr(alarm.wake_alarm, 'pin') and alarm.wake_alarm.pin == board.BUTTON_B
+display_weather = True # False -- financials
+
+if alarm.sleep_memory:
+    display_weather = alarm.sleep_memory[0]
+
+print('Cycle display: {}. Read saved settings {}'.format(cycle_display, alarm.sleep_memory == True)) # is True "is"
 
 # --| USER CONFIG |--------------------------
 METRIC = False  # set to True for metric units
@@ -58,7 +74,7 @@ def get_data_source_url(api="onecall", location=None):
         URL += "&lat={}".format(location[0])
         URL += "&lon={}".format(location[1])
     else:
-        raise ValueError("Unknown API type: " + api)
+        raise ValueError(" Unknown API type: " + api)
 
     return URL + "&appid=" + secrets["openweather_token"]
 
@@ -67,8 +83,14 @@ def get_latlon():
     """Use the Forecast5 API to determine lat/lon for given city."""
     magtag.url = get_data_source_url(api="forecast5", location=secrets["openweather_location"])
     magtag.json_path = ["city"]
-    raw_data = magtag.fetch()
-    return raw_data["coord"]["lat"], raw_data["coord"]["lon"]
+    succeeded = False
+    while not succeeded:
+        try:
+            raw_data = magtag.fetch()
+            return raw_data["coord"]["lat"], raw_data["coord"]["lon"]
+        except Exception as e:
+            print ('Sleeping before retrying...')
+            magtag.enter_light_sleep(5.0)
 
 
 def get_forecast(location):
@@ -150,19 +172,14 @@ def update_today(data, tz_offset=0):
     today_sunset.text = "{:2d}:{:02d} PM".format(sunset.tm_hour - 12, sunset.tm_min)
 
 
-def go_to_sleep(current_time):
-    """Enter deep sleep for time needed."""
-    # compute current time offset in seconds
-    hour, minutes, seconds = time.localtime(current_time)[3:6]
-    seconds_since_midnight = 60 * (hour * 60 + minutes) + seconds
-    # wake up 15 minutes after midnite
-    seconds_to_sleep = (24 * 60 * 60 - seconds_since_midnight) + 15 * 60
-    print(
-        "Sleeping for {} hours, {} minutes".format(
-            seconds_to_sleep // 3600, (seconds_to_sleep // 60) % 60
-        )
-    )
-    magtag.exit_and_deep_sleep(seconds_to_sleep)
+def sleep_until_button_1():
+    '''Does what it says, but it also awakes after 1 day too'''
+    alarm.sleep_memory[0] = display_weather
+    
+    time_alarm = alarm.time.TimeAlarm(monotonic_time=time.monotonic() + 3600 * 24)
+    
+    print("Sleeping for 1 day or until the leftmost button is pressed")
+    alarm.exit_and_deep_sleep_until_alarms(time_alarm, pin_alarm_first_button, pin_alarm_second_button)
 
 
 # ===========
@@ -217,7 +234,11 @@ today_sunset = label.Label(terminalio.FONT, text="12:12 PM", color=0x000000)
 today_sunset.anchor_point = (0, 0.5)
 today_sunset.anchored_position = (130, 117)
 
-today_banner = displayio.Group(max_size=10)
+status_label = label.Label(terminalio.FONT, text="Status", color=0x222222)
+status_label.anchor_point = (0, 0.5)
+status_label.anchored_position = (180, 117)
+
+today_banner = displayio.Group(max_size=11)
 today_banner.append(today_date)
 today_banner.append(city_name)
 today_banner.append(today_icon)
@@ -228,6 +249,7 @@ today_banner.append(today_humidity)
 today_banner.append(today_wind)
 today_banner.append(today_sunrise)
 today_banner.append(today_sunset)
+today_banner.append(status_label)
 
 future_banners = [
     make_banner(x=210, y=18),
@@ -244,6 +266,14 @@ for future_banner in future_banners:
 # ===========
 #  M A I N
 # ===========
+
+## Works, but is rather loud.
+#magtag.peripherals.play_tone(880, 0.5)
+#magtag.peripherals.play_tone(440, 0.25)
+#magtag.peripherals.play_tone(880, 0.5)
+
+print(magtag.network.enabled)
+
 print("Getting Lat/Lon...")
 latlon = get_latlon()
 print(secrets["openweather_location"])
@@ -262,8 +292,8 @@ time.sleep(magtag.display.time_to_refresh + 1)
 magtag.display.refresh()
 time.sleep(magtag.display.time_to_refresh + 1)
 
-print("Sleeping...")
-go_to_sleep(utc_time + local_tz_offset)
-#  entire code will run again after deep sleep cycle
-#  similar to hitting the reset button
+print("Lightly sleeping for two minutes before entering deep sleep...")
+# TODO
 
+print("Sleeping...")
+sleep_until_button_1()
