@@ -1,12 +1,19 @@
 import alarm
 import board
+import displayio
+import gc
+import json
 import time
 import terminalio
-import displayio
 import adafruit_imageload
 from adafruit_display_text import label
 from adafruit_magtag.magtag import MagTag
 from secrets import secrets
+
+# Free space at startup.
+def print_free_mem():
+    print('Free memory (kB): {}'.format(gc.mem_free() / 1024))
+print_free_mem()
 
 # Must be set earlier on before something else (unknown) grabs the pin.
 # BUTTON_A/Time alarm -- no-cycle-reset. BUTTON_B -- cycle the display on reset.
@@ -24,6 +31,8 @@ print('Cycle display: {}. Read saved settings {}'.format(cycle_display, alarm.sl
 
 # --| USER CONFIG |--------------------------
 METRIC = False  # set to True for metric units
+SIMULATE_NETWORK = False
+
 # -------------------------------------------
 
 # ----------------------------
@@ -49,6 +58,12 @@ MONTHS = (
     "December",
 ) 
 magtag = MagTag()
+print('Battery Voltage: {}'.format(magtag.peripherals.battery))
+
+magtag.peripherals.neopixel_disable = True
+magtag.peripherals.speaker_disable = True
+print('Neopixels disabled? {}'.format(magtag.peripherals.neopixel_disable))
+print('Speaker disabled? {}'.format(magtag.peripherals.speaker_disable))
 
 # ----------------------------
 # Backgrounnd bitmap
@@ -63,42 +78,43 @@ icons_small_bmp, icons_small_pal = adafruit_imageload.load(ICONS_SMALL_FILE)
 
 # /////////////////////////////////////////////////////////////////////////
 
-
-def get_data_source_url(api="onecall", location=None):
-    """Build and return the URL for the OpenWeather API."""
-    if api.upper() == "FORECAST5":
-        URL = "https://api.openweathermap.org/data/2.5/forecast?"
-        URL += "q=" + location
-    elif api.upper() == "ONECALL":
-        URL = "https://api.openweathermap.org/data/2.5/onecall?exclude=minutely,hourly,alerts"
-        URL += "&lat={}".format(location[0])
-        URL += "&lon={}".format(location[1])
-    else:
-        raise ValueError(" Unknown API type: " + api)
-
-    return URL + "&appid=" + secrets["openweather_token"]
-
-
-def get_latlon():
-    """Use the Forecast5 API to determine lat/lon for given city."""
-    magtag.url = get_data_source_url(api="forecast5", location=secrets["openweather_location"])
-    magtag.json_path = ["city"]
+def fetch_with_retries(action):
     succeeded = False
     while not succeeded:
         try:
             raw_data = magtag.fetch()
-            return raw_data["coord"]["lat"], raw_data["coord"]["lon"]
+            return action(raw_data)
         except Exception as e:
-            print ('Sleeping before retrying...')
+            print ('Sleeping before retrying: {}'.format(str(e)))
             magtag.enter_light_sleep(5.0)
 
+def get_latlon():
+    """Use the Forecast5 API to determine lat/lon for given city."""
+    magtag.url = "https://api.openweathermap.org/data/2.5/forecast?q={}&appid={}".format(
+        secrets["openweather_location"], secrets["openweather_token"])
+    magtag.json_path = ['city']
+    def parse_result(result):
+        return result["coord"]["lat"], result["coord"]["lon"]
+    
+    if SIMULATE_NETWORK:
+        return '47.6129', '-122.2044'
+    return fetch_with_retries(parse_result)
 
 def get_forecast(location):
     """Use OneCall API to fetch forecast and timezone data."""
-    resp = magtag.network.fetch(get_data_source_url(api="onecall", location=location))
-    json_data = resp.json()
-    return json_data["daily"], json_data["current"]["dt"], json_data["timezone_offset"]
+    magtag.url = "https://api.openweathermap.org/data/2.5/onecall?exclude=minutely,hourly,alerts&lat={}&lon={}&appid={}".format(
+        location[0], location[1], secrets["openweather_token"])
+    magtag.json_path = None 
+    def parse_result(raw_data):
+        result = json.loads(raw_data)
+        return result["daily"], result["current"]["dt"], result["timezone_offset"]    
 
+    if SIMULATE_NETWORK:
+        simulated_daily = json.loads('[{}]'.format(
+            (('{"sunset": 1613871593, "sunrise": 1613833526, "dt": 1613851200, "wind_speed": 2.57, "humidity": 42, ' + 
+              '"weather":[{ "icon": "10d" }], "temp": { "night": 278.56, "day": 280.88, "morn": 274.92 }},') * 7)).strip(','))
+        return simulated_daily, 1613431662, -28800 
+    return fetch_with_retries(parse_result)
 
 def make_banner(x=0, y=0):
     """Make a single future forecast info banner group."""
@@ -272,12 +288,12 @@ for future_banner in future_banners:
 #magtag.peripherals.play_tone(440, 0.25)
 #magtag.peripherals.play_tone(880, 0.5)
 
-print(magtag.network.enabled)
+print('Network on? {}'.format(magtag.network.enabled))
+
 
 print("Getting Lat/Lon...")
 latlon = get_latlon()
-print(secrets["openweather_location"])
-print(latlon)
+print('Location: {}'.format(latlon))
 
 print("Fetching forecast...")
 forecast_data, utc_time, local_tz_offset = get_forecast(latlon)
@@ -294,6 +310,10 @@ time.sleep(magtag.display.time_to_refresh + 1)
 
 print("Lightly sleeping for two minutes before entering deep sleep...")
 # TODO
+
+# Free space at shutdown
+print_free_mem()
+print('Network on? {}'.format(magtag.network.enabled))
 
 print("Sleeping...")
 sleep_until_button_1()
