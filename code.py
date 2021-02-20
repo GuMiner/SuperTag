@@ -6,6 +6,7 @@ import json
 import time
 import terminalio
 import adafruit_imageload
+import neopixel
 from adafruit_display_text import label
 from adafruit_magtag.magtag import MagTag
 from secrets import secrets
@@ -17,11 +18,13 @@ print_free_mem()
 
 # Must be set earlier on before something else (unknown) grabs the pin.
 # BUTTON_A/Time alarm -- no-cycle-reset. BUTTON_B -- cycle the display on reset.
-pin_alarm_first_button = alarm.pin.PinAlarm(pin=board.BUTTON_A, value=False, pull=True)
-pin_alarm_second_button = alarm.pin.PinAlarm(pin=board.BUTTON_B, value=False, pull=True)
+#pin_alarm_first_button = alarm.pin.PinAlarm(pin=board.BUTTON_A, value=False, pull=True)
+#pin_alarm_second_button = alarm.pin.PinAlarm(pin=board.BUTTON_B, value=False, pull=True)
 
 # alarm.wake_alarm holds an equivalent alarm for what waked the device.
-cycle_display = hasattr(alarm.wake_alarm, 'pin') and alarm.wake_alarm.pin == board.BUTTON_B
+cycle_display = alarm.wake_alarm is not None and hasattr(alarm.wake_alarm, 'pin') and alarm.wake_alarm.pin == board.BUTTON_B
+print(hasattr(alarm.wake_alarm, 'pin'))
+#print(alarm.wake_alarm.pin)
 display_weather = True # False -- financials
 
 if alarm.sleep_memory:
@@ -43,27 +46,57 @@ ICONS_LARGE_FILE = "/bmps/weather_icons_70px.bmp"
 ICONS_SMALL_FILE = "/bmps/weather_icons_20px.bmp"
 ICON_MAP = ("01", "02", "03", "04", "09", "10", "11", "13", "50")
 DAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
-MONTHS = (
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-) 
+MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December") 
 magtag = MagTag()
-print('Battery Voltage: {}'.format(magtag.peripherals.battery))
 
-magtag.peripherals.neopixel_disable = True
+# Enable neopixels
+magtag.peripherals.neopixel_disable = False
+external_pixels = magtag.peripherals.neopixels
+external_pixels.brightness = 0.3
+external_pixels.auto_write = False
+
 magtag.peripherals.speaker_disable = True
 print('Neopixels disabled? {}'.format(magtag.peripherals.neopixel_disable))
 print('Speaker disabled? {}'.format(magtag.peripherals.speaker_disable))
+
+# Grabbed from color cycle demo.
+def wheel(pos):
+    # Input a value 0 to 255 to get a color value.
+    # The colours are a transition r - g - b - back to r.
+    if pos < 0 or pos > 255:
+        return (0, 0, 0)
+    if pos < 85:
+        return (255 - pos * 3, pos * 3, 0)
+    if pos < 170:
+        pos -= 85
+        return (0, 255 - pos * 3, pos * 3)
+    pos -= 170
+    return (pos * 3, 0, 255 - pos * 3)
+
+def rainbow_cycle(wait):
+    for j in range(255):
+        for i in range(4):
+            rc_index = (i * 256 // 4) + j
+            external_pixels[i] = wheel(rc_index & 255)
+        #external_pixels[2] = (0, 0, 0)
+        external_pixels.show()
+        time.sleep(wait)
+
+rainbow_cycle(0.01)
+time.sleep(0.2)
+
+# Clear
+external_pixels[1] = (0, 0, 0)
+external_pixels[2] = (0, 0, 0)
+external_pixels[3] = (0, 0, 0)
+
+def set_status(status):
+    external_pixels[0] = wheel(status)
+    external_pixels.show()
+
+set_status(1)
+
+
 
 # ----------------------------
 # Backgrounnd bitmap
@@ -111,38 +144,36 @@ def get_forecast(location):
 
     if SIMULATE_NETWORK:
         simulated_daily = json.loads('[{}]'.format(
-            (('{"sunset": 1613871593, "sunrise": 1613833526, "dt": 1613851200, "wind_speed": 2.57, "humidity": 42, ' + 
+            (('{"sunset": 1613871593, "sunrise": 1613833526, "dt": 1613851200, "wind_speed": 4.57, "humidity": 100, ' + 
               '"weather":[{ "icon": "10d" }], "temp": { "night": 278.56, "day": 280.88, "morn": 274.92 }},') * 7)).strip(','))
         return simulated_daily, 1613431662, -28800 
     return fetch_with_retries(parse_result)
 
+def make_label(sample_text, position):
+    lbl = label.Label(terminalio.FONT, text=sample_text, color=0x000000)
+    lbl.anchor_point = (0, 0.5)
+    lbl.anchored_position = position
+    return lbl
+
+def make_group(items, x, y):
+    group = displayio.Group(max_size=len(items), x=x, y=y)
+    for item in items:
+        group.append(item)
+    return group
+
 def make_banner(x=0, y=0):
     """Make a single future forecast info banner group."""
-    day_of_week = label.Label(terminalio.FONT, text="DAY", color=0x000000)
-    day_of_week.anchor_point = (0, 0.5)
-    day_of_week.anchored_position = (0, 10)
+    day_of_week = make_label("DAY", (0, 10))
+    day_temp = make_label("+100F", (50, 10))
 
     icon = displayio.TileGrid(
         icons_small_bmp,
         pixel_shader=icons_small_pal,
-        x=25,
-        y=0,
-        width=1,
-        height=1,
-        tile_width=20,
-        tile_height=20,
-    )
+        x=25, y=0,
+        width=1, height=1,
+        tile_width=20, tile_height=20)
 
-    day_temp = label.Label(terminalio.FONT, text="+100F", color=0x000000)
-    day_temp.anchor_point = (0, 0.5)
-    day_temp.anchored_position = (50, 10)
-
-    group = displayio.Group(max_size=3, x=x, y=y)
-    group.append(day_of_week)
-    group.append(icon)
-    group.append(day_temp)
-
-    return group
+    return make_group([day_of_week, icon, day_temp], x, y)
 
 
 def temperature_text(tempK):
@@ -161,9 +192,9 @@ def wind_text(speedms):
 
 def update_banner(banner, data):
     """Update supplied forecast banner with supplied data."""
-    banner[0].text = DAYS[time.localtime(data["dt"]).tm_wday][:3].upper()
-    banner[1][0] = ICON_MAP.index(data["weather"][0]["icon"][:2])
-    banner[2].text = temperature_text(data["temp"]["day"])
+    banner[0].text = DAYS[time.localtime(data["dt"]).tm_wday][:3].upper() # day_of_week
+    banner[1][0] = ICON_MAP.index(data["weather"][0]["icon"][:2]) # icon
+    banner[2].text = temperature_text(data["temp"]["day"]) # day_temp
 
 
 def update_today(data, tz_offset=0):
@@ -172,12 +203,8 @@ def update_today(data, tz_offset=0):
     sunrise = time.localtime(data["sunrise"] + tz_offset)
     sunset = time.localtime(data["sunset"] + tz_offset)
 
-    today_date.text = "{} {} {}, {}".format(
-        DAYS[date.tm_wday].upper(),
-        MONTHS[date.tm_mon - 1].upper(),
-        date.tm_mday,
-        date.tm_year,
-    )
+    today_date.text = "{} {}, {} ({})".format(
+        MONTHS[date.tm_mon - 1], date.tm_mday, date.tm_year, DAYS[date.tm_wday])
     today_icon[0] = ICON_MAP.index(data["weather"][0]["icon"][:2])
     today_morn_temp.text = temperature_text(data["temp"]["morn"])
     today_day_temp.text = temperature_text(data["temp"]["day"])
@@ -186,6 +213,7 @@ def update_today(data, tz_offset=0):
     today_wind.text = wind_text(data["wind_speed"])
     today_sunrise.text = "{:2d}:{:02d} AM".format(sunrise.tm_hour, sunrise.tm_min)
     today_sunset.text = "{:2d}:{:02d} PM".format(sunset.tm_hour - 12, sunset.tm_min)
+    battery_label.text = "{:.2f}".format(magtag.peripherals.battery)
 
 
 def sleep_until_button_1():
@@ -195,64 +223,35 @@ def sleep_until_button_1():
     time_alarm = alarm.time.TimeAlarm(monotonic_time=time.monotonic() + 3600 * 24)
     
     print("Sleeping for 1 day or until the leftmost button is pressed")
-    alarm.exit_and_deep_sleep_until_alarms(time_alarm, pin_alarm_first_button, pin_alarm_second_button)
+    alarm.exit_and_deep_sleep_until_alarms(time_alarm) #, pin_alarm_second_button) #pin_alarm_first_button, pin_alarm_second_button)
 
 
 # ===========
 # U I
 # ===========
-today_date = label.Label(terminalio.FONT, text="?" * 30, color=0x000000)
-today_date.anchor_point = (0, 0)
-today_date.anchored_position = (15, 13)
-
-city_name = label.Label(
-    terminalio.FONT, text=secrets["openweather_location"], color=0x000000
-)
-city_name.anchor_point = (0, 0)
-city_name.anchored_position = (15, 24)
+city_name = make_label(secrets["openweather_location"], (15, 19))
+today_date = make_label("?" * 35, (15, 32))
 
 today_icon = displayio.TileGrid(
     icons_large_bmp,
     pixel_shader=icons_small_pal,
-    x=10,
-    y=40,
-    width=1,
-    height=1,
-    tile_width=70,
-    tile_height=70,
-)
+    x=10, y=40,
+    width=1, height=1,
+    tile_width=70, tile_height=70)
 
-today_morn_temp = label.Label(terminalio.FONT, text="+100F", color=0x000000)
-today_morn_temp.anchor_point = (0.5, 0)
-today_morn_temp.anchored_position = (118, 59)
+# Weather
+today_morn_temp = make_label("+100F", (110, 64))
+today_day_temp = make_label("+100F", (139, 64))
+today_night_temp = make_label("+100F", (170, 64))
 
-today_day_temp = label.Label(terminalio.FONT, text="+100F", color=0x000000)
-today_day_temp.anchor_point = (0.5, 0)
-today_day_temp.anchored_position = (149, 59)
+today_humidity = make_label("100%", (120, 85))
+today_wind = make_label("99m/s", (157, 85))
 
-today_night_temp = label.Label(terminalio.FONT, text="+100F", color=0x000000)
-today_night_temp.anchor_point = (0.5, 0)
-today_night_temp.anchored_position = (180, 59)
+today_sunrise = make_label("12:00 PM", (130, 104))
+today_sunset = make_label("12:00 PM", (130, 117))
 
-today_humidity = label.Label(terminalio.FONT, text="100%", color=0x000000)
-today_humidity.anchor_point = (0, 0.5)
-today_humidity.anchored_position = (105, 95)
-
-today_wind = label.Label(terminalio.FONT, text="99m/s", color=0x000000)
-today_wind.anchor_point = (0, 0.5)
-today_wind.anchored_position = (155, 95)
-
-today_sunrise = label.Label(terminalio.FONT, text="12:12 PM", color=0x000000)
-today_sunrise.anchor_point = (0, 0.5)
-today_sunrise.anchored_position = (45, 117)
-
-today_sunset = label.Label(terminalio.FONT, text="12:12 PM", color=0x000000)
-today_sunset.anchor_point = (0, 0.5)
-today_sunset.anchored_position = (130, 117)
-
-status_label = label.Label(terminalio.FONT, text="Status", color=0x222222)
-status_label.anchor_point = (0, 0.5)
-status_label.anchored_position = (180, 117)
+# Common
+battery_label = make_label("?.??", (271, 6))
 
 today_banner = displayio.Group(max_size=11)
 today_banner.append(today_date)
@@ -265,7 +264,7 @@ today_banner.append(today_humidity)
 today_banner.append(today_wind)
 today_banner.append(today_sunrise)
 today_banner.append(today_sunset)
-today_banner.append(status_label)
+today_banner.append(battery_label)
 
 future_banners = [
     make_banner(x=210, y=18),
@@ -290,24 +289,28 @@ for future_banner in future_banners:
 
 print('Network on? {}'.format(magtag.network.enabled))
 
-
+set_status(20)
 print("Getting Lat/Lon...")
 latlon = get_latlon()
 print('Location: {}'.format(latlon))
 
+set_status(60)
 print("Fetching forecast...")
 forecast_data, utc_time, local_tz_offset = get_forecast(latlon)
 
+set_status(100)
 print("Updating...")
 update_today(forecast_data[0], local_tz_offset)
 for day, forecast in enumerate(forecast_data[1:6]):
     update_banner(future_banners[day], forecast)
 
+set_status(140)
 print("Refreshing...")
 time.sleep(magtag.display.time_to_refresh + 1)
 magtag.display.refresh()
 time.sleep(magtag.display.time_to_refresh + 1)
 
+set_status(180)
 print("Lightly sleeping for two minutes before entering deep sleep...")
 # TODO
 
@@ -316,4 +319,5 @@ print_free_mem()
 print('Network on? {}'.format(magtag.network.enabled))
 
 print("Sleeping...")
+magtag.peripherals.neopixel_disable = True
 sleep_until_button_1()
