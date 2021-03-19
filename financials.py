@@ -24,12 +24,54 @@ def _render_asset_allocations(stock_categories):
             asset_allocations.append(rect.Rect(145, int(15 + i * 14), int(allocation/2.0), 12, fill=0x888888, outline=0x000000, stroke=1))
     return asset_allocations
 
+
+def _render_other_allocations():
+    other = displayio.Group(max_size=3)
+    if not const.SIMULATE_NETWORK:
+        allocation = 23
+        other.append(display_util.make_label('{:.1f}%'.format(allocation), (110, 118)))
+        other.append(rect.Rect(145, 113, int(allocation/2.0), 12, fill=0x888888, outline=0x000000, stroke=1))
+        other.append(display_util.make_label(secrets["otherCategoryName"], (150, 118)))
+    return other
+    
+
+def _render_asset_status(stock_categories):
+    asset_status = displayio.Group(max_size=2*len(stock_categories))
+    if not const.SIMULATE_NETWORK:
+        for i in range(0, len(stock_categories)):
+            status = 50 - i * 15
+            scaled_status = int(status * 0.75)
+            offset_x = 230
+            if scaled_status > 0:
+                asset_status.append(rect.Rect(offset_x, int(15 + i * 14), scaled_status, 12, fill=0xCCCCCC, outline=0x000000, stroke=1))
+                offset_x = offset_x + 7 # Make '-' align with '+' items
+            else:
+                asset_status.append(rect.Rect(offset_x + scaled_status, int(15 + i * 14), -scaled_status, 12, fill=0xCCCCCC, outline=0x000000, stroke=1))
+
+            asset_status.append(display_util.make_label('{:.1f}%'.format(status), (offset_x - 20, 20 + i * 14)))
+
+    return asset_status
+
+
+def _render_sum_total():
+    if not const.SIMULATE_NETWORK:
+        overall_performance = 23.2
+
+    return display_util.make_label('{:.1f}%'.format(overall_performance), (228, 117))
+
+
 def run(magtag):
     magtag.graphics.set_background(BACKGROUND_BMP)
     
     stock_categories = secrets["stockCategories"]
     stock_category_labels = _render_stock_categories(stock_categories)
     asset_allocations = _render_asset_allocations(stock_categories)
+    other = _render_other_allocations()
+    status = _render_asset_status(stock_categories)
+    sum_total = _render_sum_total()
     
     magtag.splash.append(stock_category_labels)
     magtag.splash.append(asset_allocations)
+    magtag.splash.append(other)
+    magtag.splash.append(status)
+    magtag.splash.append(sum_total)
