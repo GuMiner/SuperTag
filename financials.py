@@ -1,6 +1,7 @@
 from adafruit_display_shapes import rect
 import displayio
 import json
+import time
 from secrets import secrets
 
 import const
@@ -76,6 +77,8 @@ def _render_sum_total(data):
 
 def run(magtag):
     magtag.graphics.set_background(BACKGROUND_BMP)
+    time.sleep(magtag.display.time_to_refresh)
+
     financial_data = _get_financials(magtag)
     
     stock_categories = secrets['stockCategories']

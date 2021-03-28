@@ -21,6 +21,7 @@ def render_and_light_sleep(magtag):
     while len(magtag.splash) > default_magtag_splash_length:
         magtag.splash.pop()
     magtag.graphics.set_background(0xFFFFFF)
+    time.sleep(magtag.display.time_to_refresh)
 
     # Render page
     status.set(2, status.RED)
@@ -37,9 +38,9 @@ def render_and_light_sleep(magtag):
     
     
     print("Refreshing...")
-    time.sleep(magtag.display.time_to_refresh)
+    time.sleep(magtag.display.time_to_refresh + 1)
     magtag.display.refresh()
-    time.sleep(magtag.display.time_to_refresh)
+    time.sleep(magtag.display.time_to_refresh + 1)
     status.set(2, status.BLUE)
     
     print("Lightly sleeping for one minute before entering deep sleep...")

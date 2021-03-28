@@ -14,9 +14,12 @@ def _cycle_display_if_requested():
     global display_weather
     
     if hasattr(alarm.wake_alarm, 'pin') and alarm.wake_alarm.pin == board.BUTTON_B:
-        display_weather = not display_weather
-        print('Display Weather? {}'.format(display_weather))
+        display_weather = False
         return True
+    elif hasattr(alarm.wake_alarm, 'pin') and alarm.wake_alarm.pin == board.BUTTON_A:
+        display_weather = True
+        return True
+
     return False
 
 

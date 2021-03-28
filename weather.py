@@ -82,7 +82,8 @@ def update_banner(banner, data):
     
 def run(magtag):
     magtag.graphics.set_background(BACKGROUND_BMP)
-    
+    time.sleep(magtag.display.time_to_refresh)
+
     icons_large_bmp, icons_large_pal = adafruit_imageload.load(ICONS_LARGE_FILE)
     icons_small_bmp, icons_small_pal = adafruit_imageload.load(ICONS_SMALL_FILE)
     
