@@ -15,7 +15,7 @@ def _get_financials(magtag):
     magtag.url = 'https://helium24.net/api/Finance/Status'
     magtag.json_path = None 
     if const.SIMULATE_NETWORK:
-        return json.loads('{"allocations":{"Corporate Bonds":4.37385941,"Emerging Markets":12.5390434,"Foreign Stock":10.69141,"Muncipal Bonds":4.1756587,"Other":17.6627483,"Real Estate":5.23509026,"US Dividend":27.5087681,"US General":17.8134212},"performances":{"Corporate Bonds":12.9236813,"Emerging Markets":13.750494,"Foreign Stock":10.3545074,"Muncipal Bonds":7.21372366,"Other":52.8432121,"Real Estate":-5.606377,"US Dividend":20.0802212,"US General":5.526781},"overalPerformance":17.1360741}')
+        return json.loads('{"allocations":{"Corporate Bonds":4.26088142,"Emerging Markets":12.1293392,"Foreign Stock":10.4879065,"Muncipal Bonds":4.05872,"Other":18.8859253,"Real Estate":5.290577,"US Dividend":27.33569,"US General":17.5509624},"performances":{"Corporate Bonds":14.1550779,"Emerging Markets":14.1830559,"Foreign Stock":12.3361588,"Muncipal Bonds":8.140934,"Other":69.59058,"Real Estate":-0.00867748,"US Dividend":23.8243217,"US General":7.89266825},"overalPerformance":21.5531578}')
 
     def parse_result(raw_data):
         result = json.loads(raw_data)
@@ -36,6 +36,7 @@ def _render_asset_allocations(stock_categories, data):
     for i in range(0, len(stock_categories)):
         allocation = data['allocations'][stock_categories[i]]
         scaled_allocation = int(allocation * ALLOCATION_SCALE)
+        scaled_allocation = 1 if scaled_allocation == 0 else scaled_allocation
         
         asset_allocations.append(display_util.make_label('{:.1f}%'.format(allocation), (110, 20 + i * 14)))
         asset_allocations.append(rect.Rect(145, int(15 + i * 14), scaled_allocation, 12, fill=0x888888, outline=0x000000, stroke=1))
@@ -45,6 +46,7 @@ def _render_asset_allocations(stock_categories, data):
 def _render_other_allocations(data):
     allocation = data['allocations']['Other']
     scaled_allocation = int(allocation * ALLOCATION_SCALE)
+    scaled_allocation = 1 if scaled_allocation == 0 else scaled_allocation
 
     other = displayio.Group(max_size=3)
     other.append(display_util.make_label('{:.1f}%'.format(allocation), (110, 118)))
@@ -58,6 +60,7 @@ def _render_asset_status(stock_categories, data):
     for i in range(0, len(stock_categories)):
         status = data['performances'][stock_categories[i]]
         scaled_status = int(status * ALLOCATION_SCALE)
+        scaled_status = 1 if scaled_status == 0 else scaled_status
 
         offset_x = 230
         if scaled_status > 0:

@@ -3,7 +3,7 @@ import board
 import time
 
 # Must be set early on before something else (unknown) grabs the pin.
-# BUTTON_A/Time alarm -- no-cycle-reset. BUTTON_B -- cycle the display on reset.
+# BUTTON_A -- Weather. BUTTON_B -- Financials.
 pin_alarm_first_button = alarm.pin.PinAlarm(pin=board.BUTTON_A, value=False, pull=True)
 pin_alarm_second_button = alarm.pin.PinAlarm(pin=board.BUTTON_B, value=False, pull=True)
 
@@ -37,11 +37,5 @@ def deep_sleep():
 
 
 def load():
-    global display_weather
-    
-    # Load from sleep, if present
-    if alarm.sleep_memory:
-        display_weather = alarm.sleep_memory[0]
-        
-    # If the 'next' button was pressed, cycle the weather state.
+    # If a button was pressed, cycle the weather state.
     _cycle_display_if_requested()
