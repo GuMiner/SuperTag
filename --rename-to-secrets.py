@@ -1,7 +1,8 @@
+
 secrets = {
     'ssid' : 'WifiRouterName',
     'password' : 'RouterPassword',
-    'openweather_token': 'OpenWeatherAPIToken',
-    'openweather_location' : 'Bellevue, US', 
+    'location': 'OFFICE/GRIDX,GRIDY',
+    'city': 'CITY',
     'timezone' : "America/Los_Angeles", # http://worldtimeapi.org/timezones
     }

@@ -25,10 +25,7 @@ def render_and_light_sleep(magtag):
 
     # Render page
     status.set(2, status.RED)
-    if state.display_weather:
-        weather.run(magtag)
-    else:
-        financials.run(magtag)
+    weather.run(magtag)
     status.set(2, status.GREEN)
     
     # Render common UI.
@@ -42,6 +39,12 @@ def render_and_light_sleep(magtag):
     magtag.display.refresh()
     time.sleep(magtag.display.time_to_refresh + 1)
     status.set(2, status.BLUE)
+
+    for i in range(20):
+        status.set(2, status.YELLOW)
+        time.sleep(0.5)
+        status.set(2, status.BLUE)
+        time.sleep(0.5)
     
     print("Lightly sleeping for one minute before entering deep sleep...")
     if state.light_sleep():
