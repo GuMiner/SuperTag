@@ -92,10 +92,7 @@ def run(magtag):
     icons_large_bmp, icons_large_pal = adafruit_imageload.load(ICONS_LARGE_FILE)
     icons_small_bmp, icons_small_pal = adafruit_imageload.load(ICONS_SMALL_FILE)
     
-    # == UI ==
-    city_name = display_util.make_label(secrets["city"], (15, 19))
-    today_date = display_util.make_label("?" * 30, (15, 32))
-    
+    # == UI ==    
     today_icon = displayio.TileGrid(
         icons_large_bmp,
         pixel_shader=icons_small_pal,
@@ -104,13 +101,27 @@ def run(magtag):
         tile_width=70, tile_height=70)
     
     # Weather
-    today_day_temp = display_util.make_label("100 F", (130, 64))
-    today_night_temp = display_util.make_label("100 F", (160, 64))
+    print("Fetching forecast...")
+    forecast_data = get_forecast(magtag)
     
-    today_humidity = display_util.make_label("100%", (90, 70))
-    today_wind = display_util.make_label("7 to 10 mph", (110, 85))
+    print("Updating...")
+    # Perform custom updates for the current day
+    forecast_day = forecast_data["periods"][0]
+    forecast_night = forecast_data["periods"][1]
+    date_weekday = datetime.fromisoformat(forecast_night["endTime"])  # Hack to account for the time zone 
+    date = datetime.fromisoformat(forecast_night["startTime"])
+
+    today_date = display_util.make_label("{} {}, {} ({})".format(
+        const.MONTHS[date.month - 1], date.day, date.year, const.DAYS[date_weekday.weekday() - 1]), (15, 32))
+    city_name = display_util.make_label(secrets["city"], (15, 19))
+
+    today_day_temp = display_util.make_label(f"{forecast_day['temperature']}F", (130, 64))
+    today_night_temp = display_util.make_label(f"{forecast_night['temperature']}F", (160, 64))
     
-    today_details = display_util.make_label("Partly Cloudy -> Partly Cloudy", (90, 115))
+    today_humidity = display_util.make_label(f"{forecast_day['relativeHumidity']['value']}%", (90, 70))
+    today_wind = display_util.make_label(forecast_day["windSpeed"], (110, 85))
+    
+    today_details = display_util.make_label(f"{forecast_day['shortForecast']} -> {forecast_night['shortForecast']}", (90, 115))
     
     today_banner = displayio.Group(max_size=9)
     today_banner.append(today_date)
@@ -133,25 +144,8 @@ def run(magtag):
     magtag.splash.append(today_banner)
     for future_banner in future_banners:
         magtag.splash.append(future_banner)
-    
-    print("Fetching forecast...")
-    forecast_data = get_forecast(magtag)
-    
-    print("Updating...")
-    # Perform custom updates for the current day
-    forecast_day = forecast_data["periods"][0]
-    forecast_night = forecast_data["periods"][1]
-    date_weekday = datetime.fromisoformat(forecast_night["endTime"])  # Hack to account for the time zone 
-    date = datetime.fromisoformat(forecast_night["startTime"])
 
-    today_date.text = "{} {}, {} ({})".format(
-        const.MONTHS[date.month - 1], date.day, date.year, const.DAYS[date_weekday.weekday() - 1])
     today_icon[0] = get_weather_icon(forecast_day["shortForecast"])
-    today_day_temp.text = f"{forecast_day['temperature']}F"
-    today_night_temp.text = f"{forecast_night['temperature']}F"
-    today_humidity.text = f"{forecast_day['relativeHumidity']['value']}%"
-    today_wind.text = forecast_day["windSpeed"]
-    today_details.text = f"{forecast_day['shortForecast']} -> {forecast_night['shortForecast']}"
 
     # Update all the future days in the right sidebar
     for i in range(len(future_banners)):
